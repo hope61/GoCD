@@ -29,13 +29,9 @@ func Pull(dir, remote, branch string) (bool, error) {
 	cmd.Dir = dir
 
 	output, err := cmd.CombinedOutput()
-	if len(output) > 0 {
-		log.Printf("git output:\n%s", strings.TrimSpace(string(output)))
-	}
+	out := strings.TrimSpace(string(output))
 
 	if err != nil {
-		out := string(output)
-
 		switch {
 		case strings.Contains(out, "does not appear to be a git repository"):
 			return false, fmt.Errorf("remote '%s' does not exist or is not a valid repository", remote)
@@ -54,12 +50,11 @@ func Pull(dir, remote, branch string) (bool, error) {
 		}
 	}
 
-	if strings.Contains(string(output), "Already up to date.") {
-		log.Printf("repo is already up to date")
+	if strings.Contains(out, "Already up to date.") {
 		return false, nil
 	}
 
-	log.Printf("git pull completed successfully")
+	log.Printf("pulled new changes")
 	return true, nil
 }
 
@@ -70,14 +65,24 @@ func RunCommand(dir, command string) error {
 	cmd.Dir = dir
 
 	output, err := cmd.CombinedOutput()
-	if len(output) > 0 {
-		log.Printf("command output:\n%s", strings.TrimSpace(string(output)))
-	}
+	out := strings.TrimSpace(string(output))
 
 	if err != nil {
+		lines := lastLines(out, 30)
+		if lines != "" {
+			log.Printf("command output (last 10 lines):\n%s", lines)
+		}
 		return fmt.Errorf("command failed: %s — %w", command, err)
 	}
 
 	log.Printf("command finished successfully")
 	return nil
+}
+
+func lastLines(s string, n int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return "...\n" + strings.Join(lines[len(lines)-n:], "\n")
 }

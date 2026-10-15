@@ -22,8 +22,6 @@ func main() {
 	logFile := logger.Setup(binDir)
 	defer logFile.Close()
 
-	log.Printf("--- run started ---")
-
 	configPath := filepath.Join(binDir, "config.yaml")
 	cfg, err := config.Load(configPath)
 
@@ -32,8 +30,8 @@ func main() {
 	}
 
 	if cfg != nil && len(cfg.Repos) > 0 {
-		log.Printf("loaded %d repo(s) from config", len(cfg.Repos))
 		hasError := false
+		hasChanges := false
 
 		for _, repo := range cfg.Repos {
 			currentBranch, err := git.CurrentBranch(repo.Dir)
@@ -48,31 +46,32 @@ func main() {
 				continue
 			}
 
-			branch := repo.Branch
-			if branch == "" {
-				branch = currentBranch
-			}
-
-			log.Printf("pulling %s (%s/%s)", repo.Dir, repo.Remote, branch)
-
 			changed, err := git.Pull(repo.Dir, repo.Remote, repo.Branch)
 			if err != nil {
-				log.Printf("ERROR: %v", err)
+				log.Printf("ERROR: %s — %v", repo.Dir, err)
 				hasError = true
 				continue
 			}
 
-			if changed && len(repo.Commands) > 0 {
-				log.Printf("new changes detected, running %d command(s)", len(repo.Commands))
-				for _, cmd := range repo.Commands {
-					err = git.RunCommand(repo.Dir, cmd)
-					if err != nil {
-						log.Printf("ERROR: %v", err)
-						hasError = true
-						break
-					}
+			if !changed {
+				continue
+			}
+
+			hasChanges = true
+			log.Printf("pulled new changes in %s", repo.Dir)
+
+			for _, cmd := range repo.Commands {
+				err = git.RunCommand(repo.Dir, cmd)
+				if err != nil {
+					log.Printf("ERROR: %v", err)
+					hasError = true
+					break
 				}
 			}
+		}
+
+		if !hasChanges && !hasError {
+			log.Printf("all repos up to date")
 		}
 
 		if hasError {
@@ -83,8 +82,6 @@ func main() {
 		if repoDir == "" {
 			repoDir = binDir
 		}
-
-		log.Printf("no config found, using flags — repo: %s | remote: %s | branch: %s", repoDir, *remote, *branch)
 
 		_, err := git.Pull(repoDir, *remote, *branch)
 		if err != nil {
