@@ -1,0 +1,16 @@
+# GoCD Configuration
+#
+# Structure:
+#   repos:
+#     - dir: /absolute/path/to/repo    (required) the local path to the git repo
+#       remote: origin                  (optional) defaults to "origin"
+#       branch: main                    (optional) defaults to "main"
+#
+# Place this file next to the GoCD binary.
+# When running via cron, the binary finds it automatically.
+
+repos:
+  - dir: /path/to/your/repo
+  - dir: /path/to/another/repo
+    remote: upstream
+    branch: develop
