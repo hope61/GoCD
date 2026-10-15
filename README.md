@@ -1,6 +1,6 @@
 # GoCD
 
-Auto-pulls your git repos so you don't have to. Set it up once with a cron job and forget about it.
+Auto-pulls your git repos and builds and runs them so you don't have to. Set it up once with a cron job and forget about it.
 
 ## Install
 
@@ -20,9 +20,19 @@ repos:
   - dir: /home/user/project-b
     remote: upstream
     branch: develop
+    commands:
+      - docker compose up -d --build
 ```
 
 `remote` and `branch` are optional, they default to `origin` and `main`.
+
+Commands only run when new changes are actually pulled, not when the repo is already up to date. They run in order and stop if one fails. You can chain commands in a single entry with `&&`:
+
+```yaml
+commands:
+  - npm install && npm run build
+  - systemctl restart myapp
+```
 
 Without a config file it falls back to flags:
 

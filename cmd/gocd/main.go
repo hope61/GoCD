@@ -38,10 +38,23 @@ func main() {
 		for _, repo := range cfg.Repos {
 			log.Printf("pulling %s (%s/%s)", repo.Dir, repo.Remote, repo.Branch)
 
-			err := git.Pull(repo.Dir, repo.Remote, repo.Branch)
+			changed, err := git.Pull(repo.Dir, repo.Remote, repo.Branch)
 			if err != nil {
 				log.Printf("ERROR: %v", err)
 				hasError = true
+				continue
+			}
+
+			if changed && len(repo.Commands) > 0 {
+				log.Printf("new changes detected, running %d command(s)", len(repo.Commands))
+				for _, cmd := range repo.Commands {
+					err = git.RunCommand(repo.Dir, cmd)
+					if err != nil {
+						log.Printf("ERROR: %v", err)
+						hasError = true
+						break
+					}
+				}
 			}
 		}
 
@@ -56,7 +69,7 @@ func main() {
 
 		log.Printf("no config found, using flags — repo: %s | remote: %s | branch: %s", repoDir, *remote, *branch)
 
-		err := git.Pull(repoDir, *remote, *branch)
+		_, err := git.Pull(repoDir, *remote, *branch)
 		if err != nil {
 			log.Printf("ERROR: %v", err)
 			os.Exit(1)

@@ -7,9 +7,10 @@ import (
 )
 
 type Repo struct {
-	Dir    string `yaml:"dir"`
-	Remote string `yaml:"remote"`
-	Branch string `yaml:"branch"`
+	Dir      string   `yaml:"dir"`
+	Remote   string   `yaml:"remote"`
+	Branch   string   `yaml:"branch"`
+	Commands []string `yaml:"commands"`
 }
 
 type Config struct {
