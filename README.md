@@ -24,7 +24,7 @@ repos:
       - docker compose up -d --build
 ```
 
-`remote` and `branch` are optional, they default to `origin` and `main`.
+`remote` defaults to `origin`. `branch` defaults to whatever branch the repo is currently on. If you set a branch and the local repo is on a different one, it logs a warning and skips that repo.
 
 Commands only run when new changes are actually pulled, not when the repo is already up to date. They run in order and stop if one fails. You can chain commands in a single entry with `&&`:
 

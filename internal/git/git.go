@@ -7,8 +7,25 @@ import (
 	"strings"
 )
 
+func CurrentBranch(dir string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = dir
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch: %w", err)
+	}
+
+	return strings.TrimSpace(string(output)), nil
+}
+
 func Pull(dir, remote, branch string) (bool, error) {
-	cmd := exec.Command("git", "pull", "--ff-only", remote, branch)
+	args := []string{"pull", "--ff-only", remote}
+	if branch != "" {
+		args = append(args, branch)
+	}
+
+	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 
 	output, err := cmd.CombinedOutput()

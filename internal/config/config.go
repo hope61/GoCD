@@ -33,9 +33,6 @@ func Load(path string) (*Config, error) {
 		if cfg.Repos[i].Remote == "" {
 			cfg.Repos[i].Remote = "origin"
 		}
-		if cfg.Repos[i].Branch == "" {
-			cfg.Repos[i].Branch = "main"
-		}
 	}
 
 	return &cfg, nil

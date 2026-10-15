@@ -15,7 +15,7 @@ import (
 func main() {
 	dir := flag.String("dir", "", "the directory of the repo (used when no config file exists)")
 	remote := flag.String("remote", "origin", "remote to pull from")
-	branch := flag.String("branch", "main", "branch to pull")
+	branch := flag.String("branch", "", "branch to pull (defaults to current branch)")
 	flag.Parse()
 
 	binDir := logger.BinaryDir()
@@ -36,7 +36,24 @@ func main() {
 		hasError := false
 
 		for _, repo := range cfg.Repos {
-			log.Printf("pulling %s (%s/%s)", repo.Dir, repo.Remote, repo.Branch)
+			currentBranch, err := git.CurrentBranch(repo.Dir)
+			if err != nil {
+				log.Printf("ERROR: %s — %v", repo.Dir, err)
+				hasError = true
+				continue
+			}
+
+			if repo.Branch != "" && repo.Branch != currentBranch {
+				log.Printf("WARNING: %s is on '%s' but config expects '%s', skipping", repo.Dir, currentBranch, repo.Branch)
+				continue
+			}
+
+			branch := repo.Branch
+			if branch == "" {
+				branch = currentBranch
+			}
+
+			log.Printf("pulling %s (%s/%s)", repo.Dir, repo.Remote, branch)
 
 			changed, err := git.Pull(repo.Dir, repo.Remote, repo.Branch)
 			if err != nil {
