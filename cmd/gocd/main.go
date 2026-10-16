@@ -16,9 +16,17 @@ func main() {
 	dir := flag.String("dir", "", "the directory of the repo (used when no config file exists)")
 	remote := flag.String("remote", "origin", "remote to pull from")
 	branch := flag.String("branch", "", "branch to pull (defaults to current branch)")
+	showLogs := flag.Bool("logs", false, "show the latest 50 lines of logs")
+	flag.BoolVar(showLogs, "l", false, "show the latest 50 lines of logs")
 	flag.Parse()
 
 	binDir := logger.BinaryDir()
+
+	if *showLogs {
+		logger.ShowLogs(binDir, 50)
+		return
+	}
+
 	logFile := logger.Setup(binDir)
 	defer logFile.Close()
 
@@ -31,7 +39,7 @@ func main() {
 
 	if cfg != nil && len(cfg.Repos) > 0 {
 		hasError := false
-		hasChanges := false
+		// hasChanges := false
 
 		for _, repo := range cfg.Repos {
 			currentBranch, err := git.CurrentBranch(repo.Dir)
@@ -57,7 +65,7 @@ func main() {
 				continue
 			}
 
-			hasChanges = true
+			// hasChanges = true
 			log.Printf("pulled new changes in %s", repo.Dir)
 
 			for _, cmd := range repo.Commands {
@@ -70,9 +78,9 @@ func main() {
 			}
 		}
 
-		if !hasChanges && !hasError {
-			log.Printf("all repos up to date")
-		}
+		// if !hasChanges && !hasError {
+		// 	log.Printf("all repos up to date")
+		// }
 
 		if hasError {
 			os.Exit(1)

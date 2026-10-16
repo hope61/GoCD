@@ -1,12 +1,14 @@
 package logger
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -42,6 +44,60 @@ func Setup(dir string) *os.File {
 	log.SetFlags(log.Ldate | log.Ltime)
 
 	return f
+}
+
+func ShowLogs(dir string, n int) {
+	logsDir := filepath.Join(dir, "logs")
+
+	var logFiles []string
+	filepath.WalkDir(logsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if strings.HasPrefix(d.Name(), "gocd_") && strings.HasSuffix(d.Name(), ".log") {
+			logFiles = append(logFiles, path)
+		}
+		return nil
+	})
+
+	if len(logFiles) == 0 {
+		fmt.Println("no log files found")
+		return
+	}
+
+	sort.Strings(logFiles)
+
+	var lines []string
+	for i := len(logFiles) - 1; i >= 0 && len(lines) < n; i-- {
+		fileLines, err := readLines(logFiles[i])
+		if err != nil {
+			continue
+		}
+		lines = append(fileLines, lines...)
+	}
+
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+
+	for _, line := range lines {
+		fmt.Println(line)
+	}
+}
+
+func readLines(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	return lines, scanner.Err()
 }
 
 func CleanOldLogs(dir string, maxAge time.Duration) {
