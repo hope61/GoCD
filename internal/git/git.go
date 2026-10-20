@@ -61,6 +61,15 @@ func Pull(dir, remote, branch string) (bool, error) {
 func RunCommand(dir, command string) error {
 	log.Printf("running: %s", command)
 
+	base := strings.Fields(command)
+	if len(base) == 0 {
+		return fmt.Errorf("empty command in config")
+	}
+
+	if _, err := exec.LookPath(base[0]); err != nil {
+		return fmt.Errorf("command not found: '%s' — check your config or install it", base[0])
+	}
+
 	cmd := exec.Command("sh", "-c", command)
 	cmd.Dir = dir
 
@@ -70,7 +79,10 @@ func RunCommand(dir, command string) error {
 	if err != nil {
 		lines := lastLines(out, 30)
 		if lines != "" {
-			log.Printf("command output (last 10 lines):\n%s", lines)
+			log.Printf("command output (last 30 lines):\n%s", lines)
+		}
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("command failed with exit code %d: %s", exitErr.ExitCode(), command)
 		}
 		return fmt.Errorf("command failed: %s — %w", command, err)
 	}
