@@ -85,6 +85,89 @@ func ShowLogs(dir string, n int) {
 	}
 }
 
+func FollowLogs(dir string, n int) {
+	logsDir := filepath.Join(dir, "logs")
+
+	logFiles := listLogFiles(logsDir)
+	if len(logFiles) == 0 {
+		fmt.Println("no log files found")
+		return
+	}
+
+	latest := logFiles[len(logFiles)-1]
+
+	var lines []string
+	fileLines, err := readLines(latest)
+	if err == nil {
+		lines = fileLines
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	for _, line := range lines {
+		fmt.Println(line)
+	}
+
+	offset, _ := fileSize(latest)
+
+	for {
+		currentFiles := listLogFiles(logsDir)
+		if len(currentFiles) > 0 {
+			newest := currentFiles[len(currentFiles)-1]
+			if newest != latest {
+				latest = newest
+				offset = 0
+			}
+		}
+
+		size, err := fileSize(latest)
+		if err != nil {
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+
+		if size > offset {
+			f, err := os.Open(latest)
+			if err != nil {
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+			f.Seek(offset, io.SeekStart)
+			scanner := bufio.NewScanner(f)
+			for scanner.Scan() {
+				fmt.Println(scanner.Text())
+			}
+			offset, _ = f.Seek(0, io.SeekCurrent)
+			f.Close()
+		}
+
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func listLogFiles(logsDir string) []string {
+	var logFiles []string
+	filepath.WalkDir(logsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if strings.HasPrefix(d.Name(), "gocd_") && strings.HasSuffix(d.Name(), ".log") {
+			logFiles = append(logFiles, path)
+		}
+		return nil
+	})
+	sort.Strings(logFiles)
+	return logFiles
+}
+
+func fileSize(path string) (int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
 func readLines(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {

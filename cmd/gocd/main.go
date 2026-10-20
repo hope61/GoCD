@@ -18,12 +18,17 @@ func main() {
 	branch := flag.String("branch", "", "branch to pull (defaults to current branch)")
 	showLogs := flag.Bool("logs", false, "show the latest 50 lines of logs")
 	flag.BoolVar(showLogs, "l", false, "show the latest 50 lines of logs")
+	followLogs := flag.Bool("f", false, "follow logs in real time (use with -l)")
 	flag.Parse()
 
 	binDir := logger.BinaryDir()
 
 	if *showLogs {
-		logger.ShowLogs(binDir, 50)
+		if *followLogs {
+			logger.FollowLogs(binDir, 50)
+		} else {
+			logger.ShowLogs(binDir, 50)
+		}
 		return
 	}
 
