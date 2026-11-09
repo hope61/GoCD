@@ -1,0 +1,40 @@
+PREFIX       ?= /opt/gocd
+# the service runs as whoever invoked sudo, so it uses their git credentials
+SERVICE_USER ?= $(or $(SUDO_USER),$(USER))
+UNIT         := /etc/systemd/system/gocd.service
+
+.PHONY: build install service uninstall
+
+build:
+	go build -o gocd ./cmd/gocd/
+
+install: build
+	mkdir -p $(PREFIX)
+	install -m 755 gocd $(PREFIX)/gocd
+	@if [ ! -f $(PREFIX)/config.yaml ] && [ -f config.yaml ]; then install -m 644 config.yaml $(PREFIX)/config.yaml; fi
+	chown -R $(SERVICE_USER) $(PREFIX)
+
+service: install
+	printf '%s\n' \
+		'[Unit]' \
+		'Description=GoCD auto-pull' \
+		'After=network-online.target' \
+		'Wants=network-online.target' \
+		'' \
+		'[Service]' \
+		'User=$(SERVICE_USER)' \
+		'ExecStart=$(PREFIX)/gocd' \
+		'Restart=always' \
+		'RestartSec=10' \
+		'' \
+		'[Install]' \
+		'WantedBy=multi-user.target' > $(UNIT)
+	systemctl daemon-reload
+	systemctl enable --now gocd
+	systemctl restart gocd
+
+uninstall:
+	-systemctl disable --now gocd
+	rm -f $(UNIT)
+	systemctl daemon-reload
+	rm -rf $(PREFIX)

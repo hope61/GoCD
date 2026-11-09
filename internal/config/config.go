@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -14,7 +15,8 @@ type Repo struct {
 }
 
 type Config struct {
-	Repos []Repo `yaml:"repos"`
+	Repos    []Repo        `yaml:"repos"`
+	Interval time.Duration `yaml:"interval"`
 }
 
 func Load(path string) (*Config, error) {
@@ -27,6 +29,10 @@ func Load(path string) (*Config, error) {
 	err = yaml.Unmarshal(data, &cfg)
 	if err != nil {
 		return nil, err
+	}
+
+	if cfg.Interval <= 0 {
+		cfg.Interval = 5 * time.Minute
 	}
 
 	for i := range cfg.Repos {

@@ -1,0 +1,25 @@
+# GoCD example config
+#
+# Copy this to config.yaml next to the gocd binary (/opt/gocd/config.yaml
+# when installed with `make service`), then `sudo systemctl restart gocd`.
+#
+#   interval:                          (optional) time between checks, e.g. 30s, 5m, 1h. defaults to 5m
+#   repos:
+#     - dir: /absolute/path/to/repo    (required) the local path to the git repo
+#       remote: origin                 (optional) defaults to "origin"
+#       branch: main                   (optional) defaults to whatever branch the repo is on
+#       commands:                      (optional) run in order after new changes are pulled
+#         - npm install && npm run build
+#
+# Commands only run when there are actual new changes, and stop at the first one that fails.
+
+interval: 5m
+
+repos:
+  - dir: /path/to/your/repo
+
+  - dir: /path/to/another/repo
+    remote: upstream
+    branch: develop
+    commands:
+      - docker compose up -d --build
