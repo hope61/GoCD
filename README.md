@@ -26,10 +26,12 @@ sudo make uninstall   # remove everything
 gocd reads `config.yaml` from the folder its binary is in, so the live config is `/opt/gocd/config.yaml`:
 
 ```
-sudo cp example-config.yaml /opt/gocd/config.yaml
-sudo nano /opt/gocd/config.yaml
+cp example-config.yaml /opt/gocd/config.yaml
+gocd -e
 sudo systemctl restart gocd
 ```
+
+`gocd -e` works like `crontab -e`: it opens the config in `$EDITOR`, or asks you to pick nvim, vim or nano the first time and saves your pick as `export EDITOR=...` in `~/.bashrc` or `~/.zshrc`. When you close the editor it checks the config and only saves it if it's valid, otherwise it shows the error and lets you fix it.
 
 A `config.yaml` in the repo folder is only copied to `/opt/gocd` on the first install. After that, edit the one in `/opt/gocd`; changing the repo copy does nothing.
 

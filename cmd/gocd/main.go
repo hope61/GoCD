@@ -20,6 +20,7 @@ func main() {
 	showLogs := flag.Bool("logs", false, "show the latest 50 lines of logs")
 	flag.BoolVar(showLogs, "l", false, "show the latest 50 lines of logs")
 	followLogs := flag.Bool("f", false, "follow logs in real time (use with -l)")
+	edit := flag.Bool("e", false, "edit config.yaml (like crontab -e)")
 	addHook := flag.Bool("add-hook", false, "add the webhook to the given repos: gocd --add-hook owner/repo ...")
 	removeHook := flag.Bool("remove-hook", false, "remove the webhook from the given repos: gocd --remove-hook owner/repo ...")
 	flag.Parse()
@@ -32,6 +33,11 @@ func main() {
 		} else {
 			logger.ShowLogs(binDir, 50)
 		}
+		return
+	}
+
+	if *edit {
+		editConfig(filepath.Join(binDir, "config.yaml"))
 		return
 	}
 
