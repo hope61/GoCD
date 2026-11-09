@@ -1,5 +1,4 @@
 # GoCD
-test
 Auto-pulls your git repos and builds and runs them so you don't have to. Set it up once as a systemd service and forget about it.
 
 ## Install

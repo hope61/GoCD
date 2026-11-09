@@ -55,6 +55,14 @@ func main() {
 		log.Fatalf("no repos in config")
 	}
 
+	logFile := logger.Setup(binDir)
+	if cfg.Mode == "webhook" {
+		log.Printf("started in webhook mode on %s, watching %d repos", cfg.Listen, len(cfg.Repos))
+	} else {
+		log.Printf("started in poll mode every %s, watching %d repos", cfg.Interval, len(cfg.Repos))
+	}
+	logFile.Close()
+
 	checks := make(chan struct{}, 1)
 	trigger := func() {
 		select {
