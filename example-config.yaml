@@ -3,7 +3,11 @@
 # Copy this to config.yaml next to the gocd binary (/opt/gocd/config.yaml
 # when installed with `make service`), then `sudo systemctl restart gocd`.
 #
-#   interval:                          (optional) time between checks, e.g. 30s, 5m, 1h. defaults to 5m
+#   mode:                              (optional) poll or webhook. defaults to poll
+#   interval:                          (optional) poll mode: time between checks, e.g. 30s, 5m, 1h. defaults to 5m
+#   listen:                            (optional) webhook mode: address to listen on. defaults to :9000
+#   secret:                            (required in webhook mode) must match the secret set on the GitHub webhook
+#   url:                               (optional) public webhook url, used by gocd --add-hook / --remove-hook
 #   repos:
 #     - dir: /absolute/path/to/repo    (required) the local path to the git repo
 #       remote: origin                 (optional) defaults to "origin"
@@ -13,7 +17,13 @@
 #
 # Commands only run when there are actual new changes, and stop at the first one that fails.
 
+mode: poll
 interval: 5m
+
+# mode: webhook
+# listen: :9000
+# secret: change-me
+# url: https://your-host:9000/
 
 repos:
   - dir: /path/to/your/repo

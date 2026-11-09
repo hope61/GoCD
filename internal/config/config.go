@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"time"
 
@@ -16,7 +17,11 @@ type Repo struct {
 
 type Config struct {
 	Repos    []Repo        `yaml:"repos"`
+	Mode     string        `yaml:"mode"`
 	Interval time.Duration `yaml:"interval"`
+	Listen   string        `yaml:"listen"`
+	Secret   string        `yaml:"secret"`
+	URL      string        `yaml:"url"`
 }
 
 func Load(path string) (*Config, error) {
@@ -29,6 +34,22 @@ func Load(path string) (*Config, error) {
 	err = yaml.Unmarshal(data, &cfg)
 	if err != nil {
 		return nil, err
+	}
+
+	switch cfg.Mode {
+	case "":
+		cfg.Mode = "poll"
+	case "poll":
+	case "webhook":
+		if cfg.Secret == "" {
+			return nil, errors.New("webhook mode needs a secret")
+		}
+	default:
+		return nil, errors.New("mode must be poll or webhook")
+	}
+
+	if cfg.Listen == "" {
+		cfg.Listen = ":9000"
 	}
 
 	if cfg.Interval <= 0 {

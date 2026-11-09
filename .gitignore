@@ -2,3 +2,4 @@
 /GoCD
 logs/
 config.yaml
+webhook.secret

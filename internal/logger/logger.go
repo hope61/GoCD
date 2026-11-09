@@ -15,6 +15,9 @@ import (
 
 func BinaryDir() string {
 	exe, err := os.Executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
 	if err != nil {
 		log.Fatalf("failed to locate binary path: %v", err)
 	}
