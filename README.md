@@ -50,7 +50,7 @@ repos:
 
 `mode` is `poll` or `webhook` and defaults to `poll`. `interval` is the time between checks (`30s`, `5m`, `1h`) and defaults to `5m`. `remote` defaults to `origin`. `branch` defaults to whatever branch the repo is currently on. If you set a branch and the repo is on a different one, it logs a warning and skips that repo.
 
-Commands only run when new changes are actually pulled. They run in order and stop if one fails. You can chain commands with `&&`:
+Commands only run when new changes are actually pulled. They run in order and stop if one fails. A command that runs longer than `timeout` (default `30m`) is killed together with everything it started, so one stuck build can't block the other repos. You can chain commands with `&&`:
 
 ```yaml
 commands:
@@ -85,7 +85,24 @@ gocd --remove-hook hope61/project-a
 
 It skips repos that already have the webhook. To cover every repo in an organization at once, add it by hand under the org's Settings → Webhooks with the same url, content type `application/json`, your secret and just the push event.
 
-Each push checks all repos in the config. It also checks once on startup.
+Each push checks all webhook repos in the config. It also checks every repo once on startup and once every 24 hours, so a webhook that never arrived (tunnel down, gocd restarting) is picked up within a day at the latest.
+
+### Mixing modes
+
+Any repo can set its own `mode` to override the top-level one. This is handy for repos you can't add a webhook to, like GoCD itself, so it can still update itself by polling:
+
+```yaml
+mode: webhook
+interval: 5m
+repos:
+  - dir: /home/user/my-app
+  - dir: /home/user/GoCD
+    mode: poll
+    commands:
+      - sudo make service
+```
+
+Webhook repos are only checked when a webhook arrives and polled repos only every `interval`, so neither causes extra checks of the other. Checks still run one at a time, so a slow build in one delays the next check of the other.
 
 If you can't open a port, put a tunnel like Cloudflare Tunnel, Tailscale Funnel or ngrok in front of `localhost:9000` and use its URL as `url`. Pick one with a fixed URL.
 

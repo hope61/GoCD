@@ -1,10 +1,14 @@
 package git
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os/exec"
 	"strings"
+	"syscall"
+	"time"
 )
 
 func CurrentBranch(dir string) (string, error) {
@@ -58,7 +62,7 @@ func Pull(dir, remote, branch string) (bool, error) {
 	return true, nil
 }
 
-func RunCommand(dir, command string) error {
+func RunCommand(dir, command string, timeout time.Duration) error {
 	log.Printf("running: %s", command)
 
 	base := strings.Fields(command)
@@ -70,8 +74,14 @@ func RunCommand(dir, command string) error {
 		return fmt.Errorf("command not found: '%s' — check your config or install it", base[0])
 	}
 
-	cmd := exec.Command("sh", "-c", command)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = dir
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = 10 * time.Second
 
 	output, err := cmd.CombinedOutput()
 	out := strings.TrimSpace(string(output))
@@ -80,6 +90,9 @@ func RunCommand(dir, command string) error {
 		lines := lastLines(out, 30)
 		if lines != "" {
 			log.Printf("command output (last 30 lines):\n%s", lines)
+		}
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("command timed out after %s and was killed: %s", timeout, command)
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return fmt.Errorf("command failed with exit code %d: %s", exitErr.ExitCode(), command)

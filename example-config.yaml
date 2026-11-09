@@ -5,6 +5,7 @@
 #
 #   mode:                              (optional) poll or webhook. defaults to poll
 #   interval:                          (optional) poll mode: time between checks, e.g. 30s, 5m, 1h. defaults to 5m
+#   timeout:                           (optional) kill a command that runs longer than this. defaults to 30m
 #   listen:                            (optional) webhook mode: address to listen on. defaults to :9000
 #   secret:                            (required in webhook mode) must match the secret set on the GitHub webhook
 #   url:                               (optional) public webhook url, used by gocd --add-hook / --remove-hook
@@ -12,6 +13,7 @@
 #     - dir: /absolute/path/to/repo    (required) the local path to the git repo
 #       remote: origin                 (optional) defaults to "origin"
 #       branch: main                   (optional) defaults to whatever branch the repo is on
+#       mode: poll                     (optional) overrides the top-level mode for this repo only
 #       commands:                      (optional) run in order after new changes are pulled
 #         - npm install && npm run build
 #

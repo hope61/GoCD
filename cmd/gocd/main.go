@@ -55,40 +55,73 @@ func main() {
 		log.Fatalf("no repos in config")
 	}
 
+	var pollRepos, hookRepos []config.Repo
+	for _, repo := range cfg.Repos {
+		if repo.Mode == "webhook" {
+			hookRepos = append(hookRepos, repo)
+		} else {
+			pollRepos = append(pollRepos, repo)
+		}
+	}
+
 	logFile := logger.Setup(binDir)
-	if cfg.Mode == "webhook" {
-		log.Printf("started in webhook mode on %s, watching %d repos", cfg.Listen, len(cfg.Repos))
-	} else {
-		log.Printf("started in poll mode every %s, watching %d repos", cfg.Interval, len(cfg.Repos))
+	if len(hookRepos) > 0 {
+		log.Printf("started webhook on %s for %d repos", cfg.Listen, len(hookRepos))
+	}
+	if len(pollRepos) > 0 {
+		log.Printf("started polling every %s for %d repos", cfg.Interval, len(pollRepos))
 	}
 	logFile.Close()
 
-	checks := make(chan struct{}, 1)
-	trigger := func() {
-		select {
-		case checks <- struct{}{}:
-		default:
-		}
-	}
-	trigger()
+	pollChecks := make(chan struct{}, 1)
+	hookChecks := make(chan struct{}, 1)
+	pollChecks <- struct{}{}
+	hookChecks <- struct{}{}
 
-	if cfg.Mode == "webhook" {
+	if len(hookRepos) > 0 {
 		go func() {
-			log.Fatal(http.ListenAndServe(cfg.Listen, webhook.Handler(cfg.Secret, trigger)))
+			log.Fatal(http.ListenAndServe(cfg.Listen, webhook.Handler(cfg.Secret, func() { signal(hookChecks) })))
 		}()
-	} else {
+	}
+	if len(pollRepos) > 0 {
 		go func() {
 			for {
 				time.Sleep(cfg.Interval)
-				trigger()
+				signal(pollChecks)
 			}
 		}()
 	}
 
-	for range checks {
+	go func() {
+		for {
+			time.Sleep(24 * time.Hour)
+			signal(pollChecks)
+			signal(hookChecks)
+		}
+	}()
+
+	for {
+		var repos []config.Repo
+		select {
+		case <-pollChecks:
+			repos = pollRepos
+		case <-hookChecks:
+			repos = hookRepos
+		}
+		if len(repos) == 0 {
+			continue
+		}
+
 		logFile := logger.Setup(binDir)
-		checkRepos(cfg.Repos)
+		checkRepos(repos, cfg.Timeout)
 		logFile.Close()
+	}
+}
+
+func signal(ch chan struct{}) {
+	select {
+	case ch <- struct{}{}:
+	default:
 	}
 }
 
@@ -125,7 +158,7 @@ func manageHooks(cfg *config.Config, add bool, repos []string) {
 	}
 }
 
-func checkRepos(repos []config.Repo) {
+func checkRepos(repos []config.Repo, timeout time.Duration) {
 	for _, repo := range repos {
 		currentBranch, err := git.CurrentBranch(repo.Dir)
 		if err != nil {
@@ -151,7 +184,7 @@ func checkRepos(repos []config.Repo) {
 		log.Printf("pulled new changes in %s", repo.Dir)
 
 		for _, cmd := range repo.Commands {
-			err = git.RunCommand(repo.Dir, cmd)
+			err = git.RunCommand(repo.Dir, cmd, timeout)
 			if err != nil {
 				log.Printf("ERROR: %v", err)
 				break
