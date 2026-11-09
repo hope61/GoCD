@@ -23,7 +23,17 @@ sudo make uninstall   # remove everything
 
 ## Config
 
-Copy `example-config.yaml` to `config.yaml`:
+gocd reads `config.yaml` from the folder its binary is in, so the live config is `/opt/gocd/config.yaml`:
+
+```
+sudo cp example-config.yaml /opt/gocd/config.yaml
+sudo nano /opt/gocd/config.yaml
+sudo systemctl restart gocd
+```
+
+A `config.yaml` in the repo folder is only copied to `/opt/gocd` on the first install. After that, edit the one in `/opt/gocd`; changing the repo copy does nothing.
+
+It looks like this:
 
 ```yaml
 mode: poll

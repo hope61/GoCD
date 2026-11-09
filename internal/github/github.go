@@ -57,18 +57,18 @@ func RemoveHook(repo, url string) error {
 }
 
 func hookIDs(repo, url string) ([]int, error) {
-	out, err := gh(nil, "api", "--paginate", "--slurp", "repos/"+repo+"/hooks")
+	out, err := gh(nil, "api", "--paginate", "repos/"+repo+"/hooks")
 	if err != nil {
 		return nil, err
 	}
 
-	var pages [][]hook
-	if err := json.Unmarshal(out, &pages); err != nil {
-		return nil, fmt.Errorf("unexpected response from github: %w", err)
-	}
-
 	var ids []int
-	for _, page := range pages {
+	dec := json.NewDecoder(bytes.NewReader(out))
+	for dec.More() {
+		var page []hook
+		if err := dec.Decode(&page); err != nil {
+			return nil, fmt.Errorf("unexpected response from github: %w", err)
+		}
 		for _, h := range page {
 			if h.Config.URL == url {
 				ids = append(ids, h.ID)

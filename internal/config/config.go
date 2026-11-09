@@ -2,7 +2,9 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -33,6 +35,9 @@ func Load(path string) (*Config, error) {
 	var cfg Config
 	err = yaml.Unmarshal(data, &cfg)
 	if err != nil {
+		if strings.Contains(err.Error(), "already defined") {
+			return nil, fmt.Errorf("%w\na setting is written twice in config.yaml, delete one of them (e.g. both 'mode: poll' and 'mode: webhook')", err)
+		}
 		return nil, err
 	}
 
