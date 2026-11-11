@@ -1,5 +1,24 @@
 # GoCD
-Auto-pulls your git repos and builds and runs them so you don't have to. Set it up once as a systemd service and forget about it.
+
+GoCD keeps the apps on your server up to date. You push to GitHub. GoCD pulls the new code and runs your build and restart commands. You don't need to log in to the server for every change.
+
+- **Small.** One Go binary and one config file.
+- **Two modes.** Check every few minutes (poll), or get the change right when you push (webhook).
+- **Safe.** It only runs your commands when there is new code. A stuck command gets killed after a time limit.
+- **Hands-off.** It runs as a systemd service and starts again if it crashes.
+
+> [!NOTE]
+> GoCD needs Linux with systemd, `git` and Go 1.26 or newer to build. Webhook setup also uses the [`gh`](https://cli.github.com) CLI.
+
+## Contents
+
+- [Install](#install)
+- [Config](#config)
+- [Webhook mode](#webhook-mode)
+- [Cloudflare Tunnel](#cloudflare-tunnel)
+- [Logs](#logs)
+- [Commands](#commands)
+- [Project layout](#project-layout)
 
 ## Install
 
@@ -9,20 +28,18 @@ cd GoCD
 sudo make service
 ```
 
-That builds the binary, installs it to `/opt/gocd`, links it to `/usr/local/bin/gocd` so you can just run `gocd`, and starts a `gocd` service that runs as your user. Put your `config.yaml` in `/opt/gocd/` and run `sudo systemctl restart gocd` after changing it.
+This does four things:
 
-Other targets:
+1. It builds the `gocd` binary.
+2. It copies it to `/opt/gocd`.
+3. It links it to `/usr/local/bin/gocd`, so you can run `gocd` from anywhere.
+4. It starts a `gocd` service. The service runs as your user, so it uses your git keys.
 
-```
-make build            # just the binary
-sudo make install     # install without the service
-make secret           # generate a webhook secret
-sudo make uninstall   # remove everything
-```
+Next, [write your config](#config).
 
 ## Config
 
-gocd reads `config.yaml` from the folder its binary is in, so the live config is `/opt/gocd/config.yaml`:
+GoCD reads `config.yaml` from the same folder as the binary. So the live config is `/opt/gocd/config.yaml`.
 
 ```
 cp example-config.yaml /opt/gocd/config.yaml
@@ -30,11 +47,10 @@ gocd -e
 sudo systemctl restart gocd
 ```
 
-`gocd -e` works like `crontab -e`: it opens the config in `$EDITOR`, or asks you to pick nvim, vim or nano the first time and saves your pick as `export EDITOR=...` in `~/.bashrc` or `~/.zshrc`. When you close the editor it checks the config and only saves it if it's valid, otherwise it shows the error and lets you fix it.
+> [!IMPORTANT]
+> Always edit the config in `/opt/gocd`. A `config.yaml` in the repo folder only gets copied on the first install. After that, changes to it do nothing.
 
-A `config.yaml` in the repo folder is only copied to `/opt/gocd` on the first install. After that, edit the one in `/opt/gocd`; changing the repo copy does nothing.
-
-It looks like this:
+### A simple config
 
 ```yaml
 mode: poll
@@ -48,9 +64,30 @@ repos:
       - docker compose up -d --build
 ```
 
-`mode` is `poll` or `webhook` and defaults to `poll`. `interval` is the time between checks (`30s`, `5m`, `1h`) and defaults to `5m`. `remote` defaults to `origin`. `branch` defaults to whatever branch the repo is currently on. If you set a branch and the repo is on a different one, it logs a warning and skips that repo.
+### All options
 
-Commands only run when new changes are actually pulled. They run in order and stop if one fails. A command that runs longer than `timeout` (default `30m`) is killed together with everything it started, so one stuck build can't block the other repos. You can chain commands with `&&`:
+| Option | Default | What it does |
+|---|---|---|
+| `mode` | `poll` | `poll` or `webhook` |
+| `interval` | `5m` | Time between checks in poll mode, like `30s`, `5m` or `1h` |
+| `timeout` | `30m` | Kill a command that runs longer than this |
+| `listen` | `:9000` | Address for webhooks |
+| `secret` | | Webhook secret. You need it in webhook mode |
+| `url` | | Public webhook URL, used by `--add-hook` |
+
+Each repo can have:
+
+| Option | Default | What it does |
+|---|---|---|
+| `dir` | | Full path to the repo. You need this one |
+| `remote` | `origin` | Git remote to pull from |
+| `branch` | current branch | If the repo is on another branch, GoCD skips it and logs a warning |
+| `mode` | top-level `mode` | Use a different mode for just this repo |
+| `commands` | | Commands to run after new code is pulled |
+
+### Commands
+
+GoCD runs the commands only when it pulls new code. They run in order. If one fails, the rest don't run. You can join commands with `&&`:
 
 ```yaml
 commands:
@@ -58,38 +95,54 @@ commands:
   - systemctl restart myapp
 ```
 
-## Webhook
+If a command runs longer than `timeout`, GoCD kills it and everything it started. Because of this, one stuck build can't block your other repos.
 
-Polling checks every `interval`. Webhook mode pulls as soon as you push instead:
+### Edit with `gocd -e`
+
+`gocd -e` works like `crontab -e`. It opens the config in your `$EDITOR`. If you don't have one, it lets you pick nvim, vim or nano. Then it saves your pick in `~/.bashrc` or `~/.zshrc`.
+
+When you close the editor, GoCD checks the config. It only saves the config if it has no errors. If it has errors, GoCD shows them and lets you fix them.
+
+## Webhook mode
+
+In poll mode, GoCD checks every `interval`. In webhook mode, GitHub tells GoCD about a push, so GoCD pulls right away.
+
+**1. Make a secret.**
+
+```
+make secret
+```
+
+This saves a secret to `webhook.secret`. Git ignores this file. Use the same secret for every repo.
+
+**2. Add it to the config.**
 
 ```yaml
 mode: webhook
 listen: :9000
 secret: your-secret
-```
-
-Generate a secret with `make secret`. It's saved to `webhook.secret` (ignored by git), copy it into `config.yaml`. Use the same secret on every webhook.
-
-Set `url` in `config.yaml` to the public address GitHub should call:
-
-```yaml
 url: https://your-host:9000/
 ```
 
-Then add the webhook to the repos you want (needs the `gh` CLI, logged in with `gh auth login`):
+`url` is the public address that GitHub calls.
+
+**3. Add the webhook to your repos.** First, log in with `gh auth login`. Then run:
 
 ```
 gocd --add-hook hope61/project-a hope61/project-b
 gocd --remove-hook hope61/project-a
 ```
 
-It skips repos that already have the webhook. To cover every repo in an organization at once, add it by hand under the org's Settings → Webhooks with the same url, content type `application/json`, your secret and just the push event.
+GoCD skips repos that already have the webhook.
 
-Each push checks all webhook repos in the config. It also checks every repo once on startup and once every 24 hours, so a webhook that never arrived (tunnel down, gocd restarting) is picked up within a day at the latest.
+> [!TIP]
+> Do you use a GitHub organization? Then you can add one webhook for all its repos. Go to the org's **Settings → Webhooks**. Use the same url and secret, content type `application/json`, and only the push event.
 
-### Mixing modes
+GoCD checks all webhook repos on each push. It also checks every repo when it starts, and once every 24 hours. Because of this, a lost webhook (for example, the tunnel was down) still gets pulled within a day.
 
-Any repo can set its own `mode` to override the top-level one. This is handy for repos you can't add a webhook to, like GoCD itself, so it can still update itself by polling:
+### Mix poll and webhook
+
+Each repo can set its own `mode`. This helps with repos that you can't add a webhook to. For example, GoCD can update itself by polling its own repo:
 
 ```yaml
 mode: webhook
@@ -102,18 +155,19 @@ repos:
       - sudo make service
 ```
 
-Webhook repos are only checked when a webhook arrives and polled repos only every `interval`, so neither causes extra checks of the other. Checks still run one at a time, so a slow build in one delays the next check of the other.
+Each mode only checks its own repos. However, checks still run one at a time. So a slow build in one repo can delay the next check of another repo.
 
-If you can't open a port, put a tunnel like Cloudflare Tunnel, Tailscale Funnel or ngrok in front of `localhost:9000` and use its URL as `url`. Pick one with a fixed URL.
+> [!NOTE]
+> Can't open a port on your server? Then put a tunnel in front of GoCD, like Cloudflare Tunnel, Tailscale Funnel or ngrok. Use the tunnel's address as `url`. Pick a tunnel with an address that doesn't change.
 
-### Cloudflare Tunnel
+## Cloudflare Tunnel
 
-In Cloudflare go to Zero Trust → Networks → Tunnels and add a public hostname to your tunnel:
+**1. Add a public hostname.** In Cloudflare, go to **Zero Trust → Networks → Tunnels**. Add a public hostname to your tunnel:
 
 - Hostname: `hook.yourdomain.com`
 - Service: `http://localhost:9000`
 
-Then use it in `config.yaml`, without the port since Cloudflare serves it on normal https:
+**2. Update the config.** Leave the port out of `url`, because Cloudflare uses normal https:
 
 ```yaml
 mode: webhook
@@ -122,23 +176,74 @@ secret: your-secret
 url: https://hook.yourdomain.com/
 ```
 
-`127.0.0.1` makes gocd only reachable through the tunnel. Run `sudo systemctl restart gocd`, then `gocd --add-hook` your repos.
+With `127.0.0.1`, people can only reach GoCD through the tunnel.
 
-Make sure Bot Fight Mode, Under Attack mode or WAF challenges don't apply to that hostname, otherwise Cloudflare blocks GitHub before it reaches gocd. The secret already keeps everyone else out.
+> [!WARNING]
+> Does cloudflared run in Docker? Then `localhost` points to the container, not to your server. Use your server's LAN IP in both places instead: Service `http://192.168.0.10:9000` and `listen: 192.168.0.10:9000`.
 
-To test it, open the repo's Settings → Webhooks → your hook → Recent Deliveries. The ping should show `204`:
+**3. Restart and add the hooks.**
 
-- `401`: the secret doesn't match, or gocd wasn't restarted after setting it
-- `403` or an HTML page: Cloudflare blocked it
-- `502` / `530`: the tunnel can't reach gocd, check `systemctl status gocd`
+```
+sudo systemctl restart gocd
+gocd --add-hook hope61/project-a
+```
 
-Then push a commit and watch it pull with `gocd -l -f`.
+> [!CAUTION]
+> Bot Fight Mode, Under Attack mode and WAF challenges can block GitHub. Turn them off for this hostname. The secret already keeps other people out.
+
+**4. Test it.** In the repo, open **Settings → Webhooks →** your hook **→ Recent Deliveries**. The ping should show `204`.
+
+| Code | What it means |
+|---|---|
+| `204` | It works |
+| `401` | The secret is wrong, or you didn't restart GoCD after you set it |
+| `403` or an HTML page | Cloudflare blocked it |
+| `502` / `530` | The tunnel can't reach GoCD. Check `systemctl status gocd` and the Docker warning above |
+
+Then push a commit and watch it with `gocd -l -f`.
 
 ## Logs
 
-Logs are saved to a `logs/` folder next to the binary, one file per day, and old ones get cleaned up after a week.
+GoCD saves logs in a `logs/` folder next to the binary. It makes one file per day and deletes files older than a week.
 
 ```
 gocd -l      # last 50 lines
-gocd -l -f   # follow
+gocd -l -f   # follow live
 ```
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `gocd -l` | Show the last 50 log lines |
+| `gocd -l -f` | Follow the logs live |
+| `gocd -e` | Edit the config safely |
+| `gocd --add-hook owner/repo ...` | Add the webhook to repos |
+| `gocd --remove-hook owner/repo ...` | Remove the webhook from repos |
+| `make build` | Only build the binary |
+| `sudo make install` | Install without the service |
+| `sudo make service` | Install and start the service |
+| `make secret` | Make a webhook secret |
+| `make bench` | Run the poll vs webhook test |
+| `sudo make uninstall` | Remove everything |
+
+## Project layout
+
+| Path | What it is |
+|---|---|
+| `cmd/gocd/` | The main program, flags and `gocd -e` |
+| `internal/config/` | Reads and checks `config.yaml` |
+| `internal/git/` | Pulls repos and runs commands |
+| `internal/webhook/` | Takes webhooks from GitHub and checks the secret |
+| `internal/github/` | Adds and removes webhooks with `gh` |
+| `internal/logger/` | Daily log files |
+| `tests/` | Speed test of poll vs webhook. Results are in `tests/results.md` |
+| `example-config.yaml` | A config with every option explained |
+| `Makefile` | Build, install and service setup |
+
+## Contributing
+
+Open an issue or a pull request. To try your changes, run `make build`, then run `./gocd` next to a test `config.yaml`.
+
+> [!NOTE]
+> GoCD uses `Setpgid` to kill stuck commands. This only works on Linux and macOS, so GoCD doesn't build on Windows.
