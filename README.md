@@ -215,6 +215,7 @@ gocd -l -f   # follow live
 
 | Command | What it does |
 |---|---|
+| `gocd -c` | Check all repos now and exit |
 | `gocd -l` | Show the last 50 log lines |
 | `gocd -l -f` | Follow the logs live |
 | `gocd -e` | Edit the config safely |

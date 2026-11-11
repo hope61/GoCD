@@ -4,13 +4,11 @@ import (
 	"flag"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/hope61/GoCD/internal/config"
 	"github.com/hope61/GoCD/internal/git"
-	"github.com/hope61/GoCD/internal/github"
 	"github.com/hope61/GoCD/internal/logger"
 	"github.com/hope61/GoCD/internal/webhook"
 )
@@ -23,6 +21,9 @@ func main() {
 	edit := flag.Bool("e", false, "edit config.yaml (like crontab -e)")
 	addHook := flag.Bool("add-hook", false, "add the webhook to the given repos: gocd --add-hook owner/repo ...")
 	removeHook := flag.Bool("remove-hook", false, "remove the webhook from the given repos: gocd --remove-hook owner/repo ...")
+	check := flag.Bool("check", false, "check all repos now and exit")
+	flag.BoolVar(check, "c", false, "check all repos now and exit")
+	flag.Usage = usage
 	flag.Parse()
 
 	binDir := logger.BinaryDir()
@@ -53,6 +54,14 @@ func main() {
 
 	if len(cfg.Repos) == 0 {
 		log.Fatalf("no repos in config")
+	}
+
+	if *check {
+		logFile := logger.Setup(binDir)
+		checkRepos(cfg.Repos, cfg.Timeout)
+		log.Printf("checked %d repos", len(cfg.Repos))
+		logFile.Close()
+		return
 	}
 
 	var pollRepos, hookRepos []config.Repo
@@ -122,39 +131,6 @@ func signal(ch chan struct{}) {
 	select {
 	case ch <- struct{}{}:
 	default:
-	}
-}
-
-func manageHooks(cfg *config.Config, add bool, repos []string) {
-	if len(repos) == 0 {
-		log.Fatalf("no repos given, e.g. gocd --add-hook owner/repo")
-	}
-	if cfg.URL == "" {
-		log.Fatalf("set url in config.yaml to the public webhook url")
-	}
-	if add && cfg.Secret == "" {
-		log.Fatalf("set secret in config.yaml first (make secret)")
-	}
-
-	failed := false
-	for _, repo := range repos {
-		var err error
-		if add {
-			err = github.AddHook(repo, cfg.URL, cfg.Secret)
-		} else {
-			err = github.RemoveHook(repo, cfg.URL)
-		}
-
-		if err != nil {
-			log.Printf("ERROR: %s — %v", repo, err)
-			failed = true
-			continue
-		}
-		log.Printf("done: %s", repo)
-	}
-
-	if failed {
-		os.Exit(1)
 	}
 }
 
