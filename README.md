@@ -224,7 +224,6 @@ gocd -l -f   # follow live
 | `sudo make install` | Install without the service |
 | `sudo make service` | Install and start the service |
 | `make secret` | Make a webhook secret |
-| `make bench` | Run the poll vs webhook test |
 | `sudo make uninstall` | Remove everything |
 
 ## Project layout
@@ -237,7 +236,6 @@ gocd -l -f   # follow live
 | `internal/webhook/` | Takes webhooks from GitHub and checks the secret |
 | `internal/github/` | Adds and removes webhooks with `gh` |
 | `internal/logger/` | Daily log files |
-| `tests/` | Speed test of poll vs webhook. Results are in `tests/results.md` |
 | `example-config.yaml` | A config with every option explained |
 | `Makefile` | Build, install and service setup |
 

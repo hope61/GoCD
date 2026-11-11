@@ -3,7 +3,7 @@ PREFIX       ?= /opt/gocd
 SERVICE_USER ?= $(or $(SUDO_USER),$(USER))
 UNIT         := /etc/systemd/system/gocd.service
 
-.PHONY: build install service uninstall secret bench
+.PHONY: build install service uninstall secret
 
 build:
 	go build -o gocd ./cmd/gocd/
@@ -37,9 +37,6 @@ service: install
 secret:
 	@if [ -f webhook.secret ]; then echo "webhook.secret already exists, delete it first to make a new one"; else umask 077 && openssl rand -hex 32 > webhook.secret; fi
 	@cat webhook.secret
-
-bench:
-	cd tests && GOCD_BENCH=1 go test -v -count=1 -timeout 20m .
 
 uninstall:
 	-systemctl disable --now gocd
