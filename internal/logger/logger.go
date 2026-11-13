@@ -91,14 +91,11 @@ func ShowLogs(dir string, n int) {
 func FollowLogs(dir string, n int) {
 	logsDir := filepath.Join(dir, "logs")
 
+	latest := ""
 	logFiles := listLogFiles(logsDir)
-	if len(logFiles) == 0 {
-		fmt.Println("no log files found")
-		return
+	if len(logFiles) != 0 {
+		latest = logFiles[len(logFiles)-1]
 	}
-
-	latest := logFiles[len(logFiles)-1]
-
 	var lines []string
 	fileLines, err := readLines(latest)
 	if err == nil {
