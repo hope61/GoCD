@@ -147,17 +147,27 @@ func checkRepos(repos []config.Repo, timeout time.Duration) {
 			continue
 		}
 
-		changed, err := git.Pull(repo.Dir, repo.Remote, repo.Branch)
+		commits, err := git.Pull(repo.Dir, repo.Remote, repo.Branch)
 		if err != nil {
 			log.Printf("ERROR: %s — %v", repo.Dir, err)
 			continue
 		}
 
-		if !changed {
+		if len(commits) == 0 {
 			continue
 		}
 
-		log.Printf("pulled new changes in %s", repo.Dir)
+		if len(commits) == 1 {
+			log.Printf("pulled 1 new commit in %s", repo.Dir)
+		} else {
+			log.Printf("pulled %d new commits in %s", len(commits), repo.Dir)
+		}
+		for _, c := range commits[:min(len(commits), 5)] {
+			log.Printf("  %s", c)
+		}
+		if len(commits) > 5 {
+			log.Printf("  ... and %d more", len(commits)-5)
+		}
 
 		for _, cmd := range repo.Commands {
 			err = git.RunCommand(repo.Dir, cmd, timeout)

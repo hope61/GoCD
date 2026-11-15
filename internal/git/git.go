@@ -23,7 +23,9 @@ func CurrentBranch(dir string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-func Pull(dir, remote, branch string) (bool, error) {
+func Pull(dir, remote, branch string) ([]string, error) {
+	before := head(dir)
+
 	args := []string{"pull", "--ff-only", remote}
 	if branch != "" {
 		args = append(args, branch)
@@ -38,28 +40,72 @@ func Pull(dir, remote, branch string) (bool, error) {
 	if err != nil {
 		switch {
 		case strings.Contains(out, "does not appear to be a git repository"):
-			return false, fmt.Errorf("remote '%s' does not exist or is not a valid repository", remote)
+			return nil, fmt.Errorf("remote '%s' does not exist or is not a valid repository", remote)
 		case strings.Contains(out, "Could not resolve host"):
-			return false, fmt.Errorf("cannot reach remote '%s' — host not found (check your URL or internet connection)", remote)
+			return nil, fmt.Errorf("cannot reach remote '%s' — host not found (check your URL or internet connection)", remote)
 		case strings.Contains(out, "Connection refused"):
-			return false, fmt.Errorf("cannot reach remote '%s' — connection refused", remote)
+			return nil, fmt.Errorf("cannot reach remote '%s' — connection refused", remote)
 		case strings.Contains(out, "Connection timed out"):
-			return false, fmt.Errorf("cannot reach remote '%s' — connection timed out", remote)
+			return nil, fmt.Errorf("cannot reach remote '%s' — connection timed out", remote)
 		case strings.Contains(out, "Authentication failed") || strings.Contains(out, "Permission denied"):
-			return false, fmt.Errorf("authentication failed for remote '%s' — check your credentials", remote)
+			return nil, fmt.Errorf("authentication failed for remote '%s' — check your credentials", remote)
 		case strings.Contains(out, "couldn't find remote ref"):
-			return false, fmt.Errorf("branch '%s' does not exist on remote '%s'", branch, remote)
+			return nil, fmt.Errorf("branch '%s' does not exist on remote '%s'", branch, remote)
 		default:
-			return false, fmt.Errorf("git pull failed: %w", err)
+			return nil, fmt.Errorf("git pull failed: %w", err)
 		}
 	}
 
-	if strings.Contains(out, "Already up to date.") {
-		return false, nil
+	after := head(dir)
+	if after == "" || after == before {
+		return nil, nil
 	}
 
-	log.Printf("pulled new changes")
-	return true, nil
+	commits, err := newCommits(dir, before, after)
+	if err != nil || len(commits) == 0 {
+		return []string{after[:7]}, nil
+	}
+	return commits, nil
+}
+
+func head(dir string) string {
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = dir
+
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func newCommits(dir, from, to string) ([]string, error) {
+	rev := to
+	if from != "" {
+		rev = from + ".." + to
+	}
+
+	cmd := exec.Command("git", "log", "--format=%h%x00%s%x00%an", rev)
+	cmd.Dir = dir
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var commits []string
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		parts := strings.SplitN(line, "\x00", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		subject := []rune(parts[1])
+		if len(subject) > 72 {
+			subject = append(subject[:69], []rune("...")...)
+		}
+		commits = append(commits, fmt.Sprintf("%s %s (%s)", parts[0], string(subject), parts[2]))
+	}
+	return commits, nil
 }
 
 func RunCommand(dir, command string, timeout time.Duration) error {
