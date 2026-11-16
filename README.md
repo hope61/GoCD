@@ -227,6 +227,7 @@ gocd -l -f   # follow live
 | `sudo make install` | Install without the service |
 | `sudo make service` | Install and start the service |
 | `make secret` | Make a webhook secret |
+| `make test` | Run all the tests |
 | `sudo make uninstall` | Remove everything |
 
 ## Project layout
