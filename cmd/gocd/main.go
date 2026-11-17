@@ -5,10 +5,13 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hope61/GoCD/internal/config"
 	"github.com/hope61/GoCD/internal/git"
+	"github.com/hope61/GoCD/internal/history"
 	"github.com/hope61/GoCD/internal/logger"
 	"github.com/hope61/GoCD/internal/webhook"
 )
@@ -23,6 +26,7 @@ func main() {
 	removeHook := flag.Bool("remove-hook", false, "remove the webhook from the given repos: gocd --remove-hook owner/repo ...")
 	check := flag.Bool("check", false, "check all repos now and exit")
 	flag.BoolVar(check, "c", false, "check all repos now and exit")
+	showHistory := flag.Bool("history", false, "show the last deploys: gocd --history [n]")
 	flag.Usage = usage
 	flag.Parse()
 
@@ -34,6 +38,19 @@ func main() {
 		} else {
 			logger.ShowLogs(binDir, 50)
 		}
+		return
+	}
+
+	if *showHistory {
+		n := 20
+		if arg := flag.Arg(0); arg != "" {
+			var err error
+			n, err = strconv.Atoi(arg)
+			if err != nil || n < 1 {
+				log.Fatalf("--history takes a number of deploys, e.g. gocd --history 50")
+			}
+		}
+		history.Show(binDir, n)
 		return
 	}
 
@@ -58,7 +75,7 @@ func main() {
 
 	if *check {
 		logFile := logger.Setup(binDir)
-		checkRepos(cfg.Repos, cfg.Timeout)
+		checkRepos(binDir, cfg.Repos, cfg.Timeout)
 		log.Printf("checked %d repos", len(cfg.Repos))
 		logFile.Close()
 		return
@@ -122,7 +139,7 @@ func main() {
 		}
 
 		logFile := logger.Setup(binDir)
-		checkRepos(repos, cfg.Timeout)
+		checkRepos(binDir, repos, cfg.Timeout)
 		logFile.Close()
 	}
 }
@@ -134,7 +151,7 @@ func signal(ch chan struct{}) {
 	}
 }
 
-func checkRepos(repos []config.Repo, timeout time.Duration) {
+func checkRepos(binDir string, repos []config.Repo, timeout time.Duration) {
 	for _, repo := range repos {
 		currentBranch, err := git.CurrentBranch(repo.Dir)
 		if err != nil {
@@ -147,6 +164,7 @@ func checkRepos(repos []config.Repo, timeout time.Duration) {
 			continue
 		}
 
+		started := time.Now()
 		commits, err := git.Pull(repo.Dir, repo.Remote, repo.Branch)
 		if err != nil {
 			log.Printf("ERROR: %s — %v", repo.Dir, err)
@@ -175,6 +193,15 @@ func checkRepos(repos []config.Repo, timeout time.Duration) {
 				log.Printf("ERROR: %v", err)
 				break
 			}
+		}
+
+		hash, message, _ := strings.Cut(commits[0], " ")
+		entry := history.Entry{Time: started, Repo: repo.Dir, Commit: hash, Message: message, Commits: len(commits), Took: time.Since(started)}
+		if err != nil {
+			entry.Error = err.Error()
+		}
+		if err := history.Add(binDir, entry); err != nil {
+			log.Printf("WARNING: failed to save history: %v", err)
 		}
 	}
 }

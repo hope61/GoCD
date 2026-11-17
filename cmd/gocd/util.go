@@ -25,6 +25,9 @@ Logs:
   -l, --logs                    show the last 50 log lines
   -l -f                         follow the logs live
 
+History:
+  --history [n]                 show the last n deploys (default 20)
+
 Config:
   -e                            edit config.yaml safely (like crontab -e)
 

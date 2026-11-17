@@ -195,6 +195,11 @@ func TestE2ECheckAndLogs(t *testing.T) {
 		t.Fatalf("-l before any log:\n%s", out)
 	}
 
+	out, _ = gocd(t, bin, "", "--history")
+	if !strings.Contains(out, "no deploys yet") {
+		t.Fatalf("--history before any deploy:\n%s", out)
+	}
+
 	out, code := gocd(t, bin, "", "-c")
 	for _, want := range []string{"pulled 2 new commits in " + r.Srv, " update list (tester)", "running: echo deployed", "command finished successfully", "checked 1 repos"} {
 		if code != 0 || !strings.Contains(out, want) {
@@ -215,6 +220,18 @@ func TestE2ECheckAndLogs(t *testing.T) {
 	out, _ = gocd(t, bin, "", "--logs")
 	if !strings.Contains(out, "pulled 2 new commits") || strings.Count(out, "checked 1 repos") != 2 {
 		t.Fatalf("-l should show both runs:\n%s", out)
+	}
+
+	out, code = gocd(t, bin, "", "--history", "5")
+	for _, want := range []string{"Today\n", "  ✓  srv  ", " update list (tester) +1", "1 deploy, 0 failed"} {
+		if code != 0 || !strings.Contains(out, want) {
+			t.Fatalf("--history missing %q (exit %d):\n%s", want, code, out)
+		}
+	}
+
+	out, code = gocd(t, bin, "", "--history", "abc")
+	if code != 1 || !strings.Contains(out, "--history takes a number of deploys") {
+		t.Fatalf("bad number should fail (exit %d):\n%s", code, out)
 	}
 }
 

@@ -19,6 +19,7 @@ GoCD keeps the apps on your server up to date. You push to GitHub. GoCD pulls th
 - [Webhook mode](#webhook-mode)
 - [Cloudflare Tunnel](#cloudflare-tunnel)
 - [Logs](#logs)
+- [History](#history)
 - [Commands](#commands)
 - [Project layout](#project-layout)
 
@@ -213,6 +214,24 @@ gocd -l      # last 50 lines
 gocd -l -f   # follow live
 ```
 
+## History
+
+`gocd --history` lists the last 20 deploys, newest first. `gocd --history 50` shows 50.
+
+```
+Today
+  14:02  ✓  my-portfolio  a1b2c3d  fix navbar (hope61) +2      2m5s
+  09:15  ✗  dipbot        9f8e7d1  new alert (hope61)            3s
+            command failed with exit code 1: npm run build
+
+Yesterday
+  18:02  ✓  GoCD          3cd01fb  added a -c flag (hope61)     41s
+
+3 deploys, 1 failed
+```
+
+A deploy is a pull that brought new commits. `+2` means two more commits came in the same pull. GoCD saves the last 500 deploys in `history.jsonl` next to the binary. Unlike the logs, they aren't deleted after a week.
+
 ## Commands
 
 | Command | What it does |
@@ -220,6 +239,7 @@ gocd -l -f   # follow live
 | `gocd -c` | Check all repos now and exit |
 | `gocd -l` | Show the last 50 log lines |
 | `gocd -l -f` | Follow the logs live |
+| `gocd --history [n]` | Show the last deploys |
 | `gocd -e` | Edit the config safely |
 | `gocd --add-hook owner/repo ...` | Add the webhook to repos |
 | `gocd --remove-hook owner/repo ...` | Remove the webhook from repos |
@@ -240,6 +260,7 @@ gocd -l -f   # follow live
 | `internal/webhook/` | Takes webhooks from GitHub and checks the secret |
 | `internal/github/` | Adds and removes webhooks with `gh` |
 | `internal/logger/` | Daily log files |
+| `internal/history/` | Saves deploys and prints `gocd --history` |
 | `example-config.yaml` | A config with every option explained |
 | `Makefile` | Build, install and service setup |
 

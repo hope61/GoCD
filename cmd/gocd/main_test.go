@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"flag"
 	"log"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hope61/GoCD/internal/config"
+	"github.com/hope61/GoCD/internal/history"
 	"github.com/hope61/GoCD/internal/testutil"
 )
 
@@ -54,7 +56,7 @@ func TestUsage(t *testing.T) {
 
 	usage()
 
-	for _, want := range []string{"Config file: ", "config.yaml", "-c, --check", "-l, --logs", "-l -f", "-e", "--add-hook owner/repo", "--remove-hook owner/repo", "-h, --help"} {
+	for _, want := range []string{"Config file: ", "config.yaml", "-c, --check", "-l, --logs", "-l -f", "--history [n]", "-e", "--add-hook owner/repo", "--remove-hook owner/repo", "-h, --help"} {
 		if !strings.Contains(buf.String(), want) {
 			t.Fatalf("help is missing %q:\n%s", want, buf.String())
 		}
@@ -66,7 +68,7 @@ func TestCheckReposRunsCommandsInOrder(t *testing.T) {
 	r.Push(t, "fix navbar", "update list")
 	logs := captureLog(t)
 
-	checkRepos([]config.Repo{repo(r.Srv, "echo one >> order.txt", "echo two >> order.txt")}, time.Minute)
+	checkRepos(t.TempDir(), []config.Repo{repo(r.Srv, "echo one >> order.txt", "echo two >> order.txt")}, time.Minute)
 
 	data, _ := os.ReadFile(filepath.Join(r.Srv, "order.txt"))
 	if string(data) != "one\ntwo\n" {
@@ -85,7 +87,7 @@ func TestCheckReposSingleCommitWording(t *testing.T) {
 	r.Push(t, "only one")
 	logs := captureLog(t)
 
-	checkRepos([]config.Repo{repo(r.Srv)}, time.Minute)
+	checkRepos(t.TempDir(), []config.Repo{repo(r.Srv)}, time.Minute)
 
 	if !strings.Contains(logs.String(), "pulled 1 new commit in "+r.Srv) {
 		t.Fatalf("got:\n%s", logs)
@@ -97,7 +99,7 @@ func TestCheckReposShowsFiveCommitsMax(t *testing.T) {
 	r.Push(t, "c1", "c2", "c3", "c4", "c5", "c6", "c7")
 	logs := captureLog(t)
 
-	checkRepos([]config.Repo{repo(r.Srv)}, time.Minute)
+	checkRepos(t.TempDir(), []config.Repo{repo(r.Srv)}, time.Minute)
 
 	out := logs.String()
 	if !strings.Contains(out, "pulled 7 new commits") || !strings.Contains(out, " c7 (tester)") ||
@@ -110,7 +112,7 @@ func TestCheckReposNoChangesRunsNothing(t *testing.T) {
 	r := testutil.NewRepos(t)
 	logs := captureLog(t)
 
-	checkRepos([]config.Repo{repo(r.Srv, "touch ran.txt")}, time.Minute)
+	checkRepos(t.TempDir(), []config.Repo{repo(r.Srv, "touch ran.txt")}, time.Minute)
 
 	if _, err := os.Stat(filepath.Join(r.Srv, "ran.txt")); err == nil {
 		t.Fatal("commands ran without new code")
@@ -125,7 +127,7 @@ func TestCheckReposStopsAfterFailedCommand(t *testing.T) {
 	r.Push(t, "change")
 	logs := captureLog(t)
 
-	checkRepos([]config.Repo{repo(r.Srv, "false", "touch after.txt")}, time.Minute)
+	checkRepos(t.TempDir(), []config.Repo{repo(r.Srv, "false", "touch after.txt")}, time.Minute)
 
 	if _, err := os.Stat(filepath.Join(r.Srv, "after.txt")); err == nil {
 		t.Fatal("a command ran after a failed one")
@@ -141,7 +143,7 @@ func TestCheckReposTimeout(t *testing.T) {
 	logs := captureLog(t)
 
 	start := time.Now()
-	checkRepos([]config.Repo{repo(r.Srv, "sleep 30", "touch after.txt")}, 300*time.Millisecond)
+	checkRepos(t.TempDir(), []config.Repo{repo(r.Srv, "sleep 30", "touch after.txt")}, 300*time.Millisecond)
 
 	if time.Since(start) > 15*time.Second {
 		t.Fatal("timeout did not stop the command")
@@ -162,7 +164,7 @@ func TestCheckReposSkipsWrongBranch(t *testing.T) {
 
 	rp := repo(r.Srv, "touch ran.txt")
 	rp.Branch = "develop"
-	checkRepos([]config.Repo{rp}, time.Minute)
+	checkRepos(t.TempDir(), []config.Repo{rp}, time.Minute)
 
 	if !strings.Contains(logs.String(), "WARNING: "+r.Srv+" is on 'main' but config expects 'develop', skipping") {
 		t.Fatalf("got:\n%s", logs)
@@ -178,7 +180,7 @@ func TestCheckReposContinuesAfterBrokenRepo(t *testing.T) {
 	notRepo := t.TempDir()
 	logs := captureLog(t)
 
-	checkRepos([]config.Repo{repo(notRepo), repo(r.Srv, "touch ran.txt")}, time.Minute)
+	checkRepos(t.TempDir(), []config.Repo{repo(notRepo), repo(r.Srv, "touch ran.txt")}, time.Minute)
 
 	if !strings.Contains(logs.String(), "ERROR: "+notRepo+" — failed to get current branch") {
 		t.Fatalf("got:\n%s", logs)
@@ -194,9 +196,66 @@ func TestCheckReposPullError(t *testing.T) {
 
 	rp := repo(r.Srv, "touch ran.txt")
 	rp.Remote = "nosuch"
-	checkRepos([]config.Repo{rp}, time.Minute)
+	checkRepos(t.TempDir(), []config.Repo{rp}, time.Minute)
 
 	if !strings.Contains(logs.String(), "ERROR: "+r.Srv+" — remote 'nosuch' does not exist") {
+		t.Fatalf("got:\n%s", logs)
+	}
+}
+
+func readHistory(t *testing.T, dir string) []history.Entry {
+	t.Helper()
+	data, _ := os.ReadFile(filepath.Join(dir, "history.jsonl"))
+	var entries []history.Entry
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		var e history.Entry
+		if json.Unmarshal([]byte(line), &e) == nil {
+			entries = append(entries, e)
+		}
+	}
+	return entries
+}
+
+func TestCheckReposSavesHistory(t *testing.T) {
+	r := testutil.NewRepos(t)
+	dir := t.TempDir()
+	captureLog(t)
+
+	r.Push(t, "fix navbar", "update list")
+	checkRepos(dir, []config.Repo{repo(r.Srv, "echo ok")}, time.Minute)
+
+	r.Push(t, "break build")
+	checkRepos(dir, []config.Repo{repo(r.Srv, "false", "echo never")}, time.Minute)
+
+	checkRepos(dir, []config.Repo{repo(r.Srv, "echo ok")}, time.Minute)
+
+	entries := readHistory(t, dir)
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 deploys (no entry without new commits), got %+v", entries)
+	}
+
+	ok := entries[0]
+	if ok.Repo != r.Srv || len(ok.Commit) < 7 || ok.Message != "update list (tester)" || ok.Commits != 2 || ok.Error != "" || ok.Time.IsZero() || ok.Took <= 0 {
+		t.Fatalf("wrong ok entry: %+v", ok)
+	}
+
+	failed := entries[1]
+	if failed.Message != "break build (tester)" || failed.Commits != 1 || failed.Error != "command failed with exit code 1: false" {
+		t.Fatalf("wrong failed entry: %+v", failed)
+	}
+}
+
+func TestCheckReposHistoryErrorDoesNotStopDeploy(t *testing.T) {
+	r := testutil.NewRepos(t)
+	r.Push(t, "change")
+	logs := captureLog(t)
+
+	checkRepos(filepath.Join(t.TempDir(), "missing"), []config.Repo{repo(r.Srv, "touch ran.txt")}, time.Minute)
+
+	if _, err := os.Stat(filepath.Join(r.Srv, "ran.txt")); err != nil {
+		t.Fatal("the deploy did not run")
+	}
+	if !strings.Contains(logs.String(), "WARNING: failed to save history") {
 		t.Fatalf("got:\n%s", logs)
 	}
 }
