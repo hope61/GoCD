@@ -1,3 +1,5 @@
+## This project is depricated and has been moved to (https://github.com/hope61/tugo)
+
 # GoCD
 
 ![A git push on top, and GoCD on the server below pulling the change and running docker compose a moment later](docs/demo.gif)
